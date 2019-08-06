@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+        canvas {
+            border: 1px solid #d3d3d3;
+            background-color: #f1f1f1;
+        }
+    </style>
+	<script src="WXNA.js"></script>
+    <script>
+	window.onload = function()
+	{
+        
+        class Asteroid extends uPosable {
+            constructor(x, y, width, height, hp, color) {
+                super(x, y);
+                this.color = color;
+                this.size = new Vector2(width, height);
+                this.hp = hp;
+				this.mass = 0;
+                this.tex = document.createElement("img");
+                if (hp > 0) {
+					this.mass = 300;
+                    this.tex.src = "astr.png";
+                } else {
+					this.mass = 1000;
+                    this.tex.src = "astr1.png";
+                }
+                this.pred = new Vector2(0, 0);
+                this.rotation = Math.random() * 6 / height;
+                this.angle = 0;
+            }
+
+            Update()
+            {
+                this.angle += this.rotation;
+                this.pos.X += this.pred.X;
+                this.pos.Y += this.pred.Y;
+                //if (Math.floor(this.pred.X) != 0 ||Math.floor(this.pred.Y) != 0) {
+                //    this.pred.X *= 0.9;
+                //    this.pred.Y *= 0.9;
+                //} else {
+                //    this.pred.X *= 0;
+                //    this.pred.Y *= 0;
+                //}
+            }
+
+            Split()
+            {
+                for (var i = 0; i < 3; i++)
+                {
+                    var p = new Vector2((Math.random()-0.5)*5, (Math.random()-0.5)*5);
+                    var aster = new Asteroid(this.pos.X + p.X*2, this.pos.Y + p.Y*2, 10, 10, 0, "brown");
+                    p.X /= 10;
+					p.Y /= 10;
+					aster.pred = p;
+                    game.GlobalAster.push(aster);
+                }
+            }
+
+            Draw(SpriteBatch) {
+                SpriteBatch.Draw(this);
+            }
+        }
+
+        class Bolt extends uPosable {
+
+            constructor(x, y, pred, size = new Vector2(5, 2), color) {
+                super(x, y);
+                this.color = color;
+                this.size = size;
+                this.pred = pred;
+				this.angle = game.Pl.angle;
+            }
+            
+            Update() {
+                this.pos.X += this.pred.X;
+                this.pos.Y += this.pred.Y;
+                
+            }
+
+            Draw(SpriteBatch) {
+                SpriteBatch.Draw(this);
+            }
+        }
+
+        class Weapon extends uPosable {
+            constructor(x, y, pred, size = new Vector2(5, 2), color, cooldown = 1000, damage = 0.1) {
+                super(x, y);
+                this.pred = pred.length();
+                this.color = color;
+                this.size = size;
+				this.canshot = true;
+				this.cooldown = cooldown;
+				this.damage = damage;
+            }
+	
+            DoShot()
+            {				
+				if(this.canshot)
+				{
+					var n = game.batch.CenterMousePos().norm();
+					var b = new Bolt(game.Pl.center().X, game.Pl.center().Y, n.mult(5).offset(game.Pl.pred), this.size, this.color);
+					b.dmg = this.damage;
+					game.GlobalBlt.push(b);
+					var that = this;
+					setTimeout(function () { that.canshot = true; }, this.cooldown);
+					this.canshot = false;
+				}
+            }
+        }
+		
+		class Bot extends uPosable {
+			constructor (v)
+			{
+				super(v.X, v.Y);
+				this.initp = new Vector2(v.X, v.Y);
+				this.size = new Vector2(10,10);
+				this.bltspd = 1.6;
+                this.weps = [
+                    new Weapon(
+                        this.pos.X + this.size.X,
+                        this.pos.Y + this.size.Y / 2,
+                        new Vector2(this.bltspd, 0), new Vector2(3, 1), "gold", 200, 1
+                        )
+                ];
+                this.bltspd = 1;
+                this.tex = document.createElement("img");
+                this.tex.src = "bot.png";
+			}
+			
+			Update(pos)
+			{
+				this.pos = pos.offset(this.initp);
+                    for (var i = 0; i < this.weps.length; i++)
+                    {
+                        this.weps[i].pos = new Vector2(this.pos.X,this.pos.Y);
+                        this.weps[i].DoShot();
+                    }
+			}
+			
+            Draw() {
+                game.batch.Draw(this);
+            }
+		}
+		
+        class Player extends uPosable {
+            constructor(x, y, width, height, color) {
+                super(x, y);
+				this.pred = new Vector2(0,0);
+                this.color = color;
+                this.size = new Vector2(width, height);
+				this.center = () => { return this.pos.offset(this.size.div(2));}
+                this.canshot = true;
+				this.angle = 0;
+                this.hp = 500;
+                this.cooldown = 1000;
+                this.bltspd = 5;
+                this.weps = [
+                    new Weapon(
+                        this.pos.X + this.size.X,
+                        this.pos.Y + this.size.Y / 2,
+                        new Vector2(this.bltspd, 0), new Vector2(5, 2), "gold", 1000, 3
+                        )
+                ];
+                this.tex = document.createElement("img");
+                this.tex.src = "pl.png";
+				this.Bots = [];
+            }
+
+            RankUp()
+            {
+                if (game.level % 8 == 0) {
+                    Pl.cooldown *= 0.97;
+                }
+
+                if (game.level % 10 == 0) {
+                    game.Pl.bltspd *= 1.08;
+					if(this.Bots.length < 5)
+					{
+						var v = new Vector2(-15, 10 * this.Bots.length-1 - 10);
+						this.Bots.push(new Bot(v));
+					}
+                }
+
+                if (game.level == 5)
+                {
+                    this.weps = [
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd, 0.15),new Vector2(5, 2), "gold", Pl.cooldown, 5),
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd, -0.15),new Vector2(5, 2), "gold", Pl.cooldown, 5)
+                    ];
+                }
+
+                if (game.level == 10) {
+                    this.weps = [
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd, 0.15),new Vector2(5, 2), "gold", Pl.cooldown, 7),
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd, 0),new Vector2(5, 2), "gold", Pl.cooldown, 7),
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd, -0.15),new Vector2(5, 2), "gold", Pl.cooldown, 7)
+                    ];
+                }
+                if (game.level == 15) {
+                    this.weps = [
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd * 2, 0.15),new Vector2(5, 2), "#47bbff", Pl.cooldown, 15),
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd * 2, 0),new Vector2(5, 2), "#47bbff", Pl.cooldown, 15),
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd * 2, -0.15),new Vector2(5, 2), "#47bbff", Pl.cooldown, 15)
+                    ];
+                    this.cooldown *= 0.7;
+                }
+
+                if (game.level == 20)
+                {
+                    this.size.Y *= 0.7;
+                    this.color = "#48a53c";
+                }
+
+                if (game.level == 35) {
+                    this.weps = [
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd * 2.5, 0.25),new Vector2(5, 2), "#58ff9b", Pl.cooldown, 30),
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd * 2.5, 0),new Vector2(5, 2), "#58ff9b", Pl.cooldown, 30),
+                        new Weapon(this.pos.X + this.size.X, this.pos.Y + this.size.Y / 2, new Vector2(this.bltspd * 2.5, -0.25),new Vector2(5, 2), "#58ff9b", Pl.cooldown, 30)
+                    ];
+                    this.cooldown *= 0.7;
+                }
+            }
+
+            Update() {
+                
+				
+				var n = game.batch.CenterMousePos().atan2();
+                if (KeyPressed(Keys.W))
+                {
+                    this.pred.Y += Math.sin(n) * 0.1;
+                    this.pred.X += Math.cos(n) * 0.1;
+                }
+
+                if (KeyPressed(Keys.S)) {
+                    this.pred.Y -= Math.sin(n) * 0.1;
+                    this.pred.X -= Math.cos(n) * 0.1;
+                }
+
+                if (KeyPressed(Keys.A)) {
+                    this.pred.Y -= Math.sin(n + Math.PI/2) * 0.1;
+                    this.pred.X -= Math.cos(n + Math.PI/2) * 0.1;
+                }
+				
+                if (KeyPressed(Keys.D)) {
+                    this.pred.Y += Math.sin(n + Math.PI/2) * 0.1;
+                    this.pred.X += Math.cos(n + Math.PI/2) * 0.1;
+                }
+
+
+				/*
+                    if (this.pos.Y < 0)
+                    {
+                        this.pred.Y = this.pos.Y = 0;
+                    }
+                    if (this.pos.X < 0) {
+                        this.pred.X = this.pos.X = 0;
+                    }
+                    if (this.pos.Y + this.size.Y > batch.Bounds.size.Y) {
+                        this.pred.Y = 0;
+						this.pos.Y = batch.Bounds.size.Y - this.size.Y;
+                    }
+                    if (this.pos.X + this.size.X > batch.Bounds.size.X) {
+                        this.pred.X = 0;
+						this.pos.X = batch.Bounds.size.X - this.size.X;
+                    }
+				*/	
+				this.pos = this.pos.offset(this.pred);
+				
+				
+
+                if (KeyPressed(Keys.SPACE) && this.canshot) {
+                    for (var i = 0; i < this.weps.length; i++)
+                    {
+                        this.weps[i].pos = new Vector2(this.pos.X + this.size.X,
+                        this.pos.Y + this.size.Y / 2);
+                        this.weps[i].DoShot();
+                    }
+                }
+
+
+                if (this.hp <= 0)
+                {
+                    this.pos = new Vector2(0, 0); //?
+                    this.size = new Vector2(0, 0); //?
+                    clearInterval(x);
+                    stop = true;
+                }
+				var plpos = this.pos
+				this.Bots.forEach(function(b)
+				{
+					b.Update(plpos);
+				});
+				
+				this.angle = game.batch.CenterMousePos().angle();
+            }
+
+            Draw() {
+                if(this.hp > 0)
+				{
+					game.batch.Draw(this);
+					this.Bots.forEach(function(b){b.Draw()});
+				}
+            }
+        }
+
+		var BonusType = {
+			Repair : 1
+		}
+		
+		class Box extends uPosable {
+			
+            constructor(x, y) {
+                super(x, y);
+				this.size = new Vector2(20);
+				this.effect = BonusType.Repair;
+                this.tex = document.createElement("img");
+                this.tex.src = "repair.png";
+                this.pred = new Vector2(0, 0);
+                this.rotation = Math.random() * 6 / 100;
+                this.angle = 0;
+            }
+
+            Update()
+            {
+                this.angle += this.rotation;
+                this.pos.X += this.pred.X;
+                this.pos.Y += this.pred.Y;
+				
+                //if (Math.floor(this.pred.X) != 0 ||Math.floor(this.pred.Y) != 0) {
+                //    this.pred.X *= 0.9;
+                //    this.pred.Y *= 0.9;
+                //} else {
+                //    this.pred.X *= 0;
+                //    this.pred.Y *= 0;
+                //}
+            }
+			
+			Draw()
+			{
+                batch.Draw(this);
+			}
+		}
+		
+        var Pl;
+        var activekey;
+        var GlobalAster = [];
+        var GlobalParticle = [];
+		var GlobalBox = [];
+        var GlobalBlt = [];
+        var keymap = {};
+        var x, min = "04", sec = "00"; 
+        var timer;
+        var name;
+        var popup, pt, p;
+		var	points = 0;
+		
+		class Game1 extends Game 
+		{
+			constructor()
+			{
+				super();
+			}
+			
+			Init() {
+				addEventListener("keydown",
+							function (evt) {
+								var key = evt.which || evt.keyCode;
+								keymap[key] = true;
+							});
+				addEventListener("keyup",
+							function (evt) {
+								var key = evt.which || evt.keyCode;
+								keymap[key] = false;
+							});
+				this.batch = new SpriteBatch();
+				this.Pl = new Player(30, this.batch.canvas.height / 2, 30, 30, "green");
+				this.level = 0;
+				this.GlobalAster = [];
+				this.GlobalBlt = [];
+				this.GlobalBox = [];
+				//x = setInterval(tick, 1000);
+			}
+
+			Coll(rect1, rect2) {
+				try
+				{
+					if (rect1.pos.X < rect2.pos.X + rect2.size.X &&
+					   rect1.pos.X + rect1.size.X > rect2.pos.X &&
+
+					   rect1.pos.Y < rect2.pos.Y + rect2.size.Y &&
+					   rect1.size.Y + rect1.pos.Y > rect2.pos.Y) {
+						return true;
+					}
+					return false;
+				} catch(e)
+				{
+					
+				}
+			}
+
+
+
+			Renew()
+			{
+				this.Pl = new Player(0, 0, 30, 30, "green");
+				this.GlobalAster = [];
+				this.GlobalBlt = [];
+				this.level = 0;
+				this.points = 0;
+				this.batch.frameNo = 0;
+				this.stop = false;
+				//x = setInterval(tick, 1000);
+				setInterval(function()
+				{
+						if(GlobalBox.length < 3)
+						{
+							var r = Math.random();
+							var box = new Box(this.batch.canvas.width, Math.random() * this.batch.canvas.height);
+							box.pred = new Vector2((Math.random())/2,(Math.random()-1/2)/2);
+							GlobalBox.push(box);
+						}
+				}, 1000);
+			}
+
+			Update() {
+				if (this.Pl.hp > 0) {
+					if (this.GlobalAster.length < 1000+this.level) {
+						var rx = Math.random()-0.5;
+						var ry = Math.random()-0.5;
+						var r = Math.random();
+						
+						var a = new Asteroid(5000 * rx, 5000 * ry, 10 * (r > 0.8 ? 3 : 1), 10 * (r > 0.8 ? 3 : 1), 10 * (r > 0.8 ? 3 : 0.5), "blue");	
+
+						this.GlobalAster.push(a);
+					}
+					
+					for (var i = 0; i < this.GlobalBox.length; i++)
+					{
+						this.GlobalBox[i].pos.X -= 1;
+						this.GlobalBox[i].Update();
+						if (this.GlobalBox[i].pos.X < this.batch.centerator.X || this.GlobalBox[i].pos.X > this.batch.centerator.X + this.batch.canvas.width || this.GlobalBox[i].pos.Y < 0 || this.GlobalBox[i].pos.Y > this.batch.canvas.height)
+						{
+							this.GlobalBox.splice(i, 1);
+						}
+					}
+					
+					var pb = new Rectangle(-this.batch.Bounds.size.X/2 + this.Pl.pos.X,-this.batch.Bounds.size.Y/2 + this.Pl.pos.Y,this.batch.Bounds.size.X,this.batch.Bounds.size.Y);
+					for (var i = 0; i < this.GlobalAster.length; i++) 
+					{
+
+						var n = this.GlobalAster[i];
+						n.Update();
+					   // if (!Coll(GlobalAster[i], n))
+						 //       GlobalAster.splice(i, 1);
+
+						if (this.Coll(n, this.Pl)) {
+							this.GlobalAster.splice(i, 1);
+							this.Pl.hp--;
+							continue;
+						}
+
+						for (var j = 0; j < this.GlobalBlt.length; j++) {
+							if (this.Coll(n, this.GlobalBlt[j])) {
+								if (n.hp <= 0) {
+									inc = this.level;
+									var pts = 10;
+									if (n.size.X > 10) {
+										n.Split();
+										pts *= 2;
+										this.level+=1;
+									}
+									pt = pts;
+									popup = n.pos;
+									clearTimeout(p);
+									p = setTimeout(
+										function () {
+											popup = null;
+											clearTimeout(p);
+										}, 1000)
+									this.GlobalAster.splice(i, 1);
+									points += pts;
+									this.level++;
+									exp_pred = 1;
+									inc = this.level - inc;
+									this.Pl.RankUp();
+								}
+								else n.hp-=this.GlobalBlt[j].dmg;
+								this.GlobalBlt.splice(j, 1);
+								break;
+							}
+						}
+						
+						for (var j = 0; j < this.GlobalBox.length; j++)
+						{
+							if(this.Coll(n, GlobalBox[j]))
+							{
+							
+							}
+						}
+						
+						/*for (var j = 0; j < GlobalAster.length; j++)
+						{
+							if(Coll(GlobalAster[i], GlobalAster[j]) GlobalAster[i].pos.dist(GlobalAster[j].pos) < 10 && GlobalAster[i] != GlobalAster[j])
+							{
+								var a = GlobalAster[i];
+								var b = GlobalAster[j];
+								
+								var mass1 = a.mass;
+								var mass2 = b.mass;
+								var velX1 = a.pred.X;
+								var velX2 = b.pred.X;
+								var velY1 = a.pred.Y;
+								var velY2 = b.pred.Y;
+								
+								var newVelX1 = (velX1 * (mass1 - mass2) + (2 * mass2 * velX2)) / (mass1 + mass2);
+								var newVelX2 = (velX2 * (mass2 - mass1) + (2 * mass1 * velX1)) / (mass1 + mass2);
+								var newVelY1 = (velY1 * (mass1 - mass2) + (2 * mass2 * velY2)) / (mass1 + mass2);
+								var newVelY2 = (velY2 * (mass2 - mass1) + (2 * mass1 * velY1)) / (mass1 + mass2);
+								
+								GlobalAster[i].pred.X = newVelX1;
+								GlobalAster[j].pred.X = newVelX2;
+								GlobalAster[i].pred.Y = newVelY1;
+								GlobalAster[j].pred.Y = newVelY2;
+								
+								GlobalAster[i].pos.X = GlobalAster[i].pos.X + newVelX1;
+								GlobalAster[i].pos.Y = GlobalAster[i].pos.Y + newVelY1;
+								GlobalAster[j].pos.X = GlobalAster[j].pos.X + newVelX2;
+								GlobalAster[j].pos.Y = GlobalAster[j].pos.Y + newVelY2;
+								
+								var d = Math.sqrt(Math.pow(a.pos.X - b.pos.X, 2) + Math.pow(a.pos.Y - b.pos.Y, 2)); 
+								var nx = (b.pos.X - a.pos.X) / d; 
+								var ny = (b.pos.Y - a.pos.Y) / d; 
+								var p = 2 * (
+								a.pred.X * nx + 
+								a.pred.Y * ny - 
+								b.pred.X * nx - 
+								b.pred.X * ny) 
+								/ (a.mass + b.mass); 
+								GlobalAster[i].pred.X = a.pred.X - p * a.mass * nx; 
+								GlobalAster[i].pred.Y = a.pred.Y - p * a.mass * ny; 
+								GlobalAster[j].pred.X = b.pred.X + p * b.mass * nx; 
+								GlobalAster[j].pred.Y = b.pred.Y + p * b.mass * ny;
+							}
+						}
+						*/
+					}
+
+					for (var i = 0; i < this.GlobalBlt.length; i++) {
+						this.GlobalBlt[i].Update();
+						if(!this.Coll(GlobalBlt[i], pb))
+						{
+						//	this.GlobalBlt.splice(i, 1)
+						}
+					}
+
+					this.batch.frameNo++;
+					
+
+					this.Pl.Update();
+				} else {
+					if (KeyPressed(Keys.R)) {
+						this.Renew();
+					}
+
+					if(stop)
+					{
+						
+						stop = false;
+					}
+				}
+			}
+
+			Draw() {
+				var v = new Vector2(this.Pl.pos.X + this.Pl.size.X/2, this.Pl.pos.Y + this.Pl.size.Y/2).substract(this.batch.Bounds.size.div(2));
+				this.batch.centerator = v;
+				this.batch.Clear();
+				//for (var i = 0; i < this.GlobalParticle.length; i++) {
+				//	this.batch.Draw(this.GlobalParticle[i].Draw());
+				//}
+				this.Pl.Draw();
+				for (var i = 0; i < this.GlobalAster.length; i++) {
+					this.batch.Draw(this.GlobalAster[i]);
+				}
+				for (var i = 0; i < this.GlobalBox.length; i++) {
+					this.batch.Draw(this.GlobalBox[i]);
+				}
+				for (var i = 0; i < this.GlobalBlt.length; i++) {
+					this.batch.Draw(this.GlobalBlt[i]);
+				}
+
+				this.batch.DrawString(new Vector2(2, 20), "Points: " + (this.level + this.points), "Consolas", "22px", "white");
+				this.batch.DrawString(new Vector2(2, 40), "Level: " + (this.level), "Consolas", "22px", "white");
+				this.batch.DrawString(new Vector2(170, 20), "HP: " + this.Pl.hp, "Consolas", "22px", "#ff8989");
+				//this.batch.DrawString(new Vector2(270, 20), "Time: " + min + ":" + sec, "Consolas", "22px", "#62ff99");
+				//this.batch.DrawString(new Vector2(570, 20), "Name: " + name, "Consolas", "22px", "gray");
+				if(this.Pl.hp == 0)
+					this.batch.DrawString(new Vector2(10, 55), "You died :(", "Consolas", "22px", "red");
+				else 
+				//if(min == "00" && sec == "00")
+					//this.batch.DrawString(new Vector2(10, 55), "You won!", "Consolas", "22px", "lime");
+
+					if (this.popup != null)
+						this.batch.DrawString(this.popup, this.pt, "Consolas", "10px", "gold");
+				
+				this.batch.DrawString(new Vector2(2, 80), this.batch.MousePos().toStr(), "Consolas", "22px", "gray");
+				this.batch.DrawString(new Vector2(2, 100), this.batch.GlobalMousePos().toStr(), "Consolas", "22px", "gray");
+				this.batch.DrawString(new Vector2(2, 120), this.batch.CenterMousePos().toStr(), "Consolas", "22px", "gray");
+				this.DrawIface();
+			}
+			
+			DrawIface()
+			{
+				this.batch.Fill(new Rectangle(this.batch.Bounds.size.X/2-430/2,this.batch.Bounds.size.Y-50, 430, 20), "gray");
+				
+				exp_pred = exp_pred > 0? exp_pred *= 0.95:0;
+				len = lerp((430-2)*(this.level/20), (430-2)*((this.level+inc)/20), InOutQuadBlend(exp_pred));
+				if(exp_pred == 0)
+				{
+					inc = 0;	
+				}
+				
+				this.batch.Fill(new Rectangle(this.batch.Bounds.size.X/2-430/2+1,this.batch.Bounds.size.Y-50+1, inc == 0? (430-2)*(this.level/20):len, 20-2), "#AAA");
+			}
+		}
+
+		var exp_pred = 0;
+		var inc = 0;
+		var len = 0;
+		
+		function lerp(val1, val2, p)
+		{
+			return val1 + (val1 - val2) * p;
+		}
+		function InOutQuadBlend(t)
+		{
+			if(t <= 0.5)
+				return 2.0 * t*t;
+			t -= 0.5;
+			return 2.0 * t * (1.0 - t) + 0.5;
+		}
+        function everyinterval(n) {
+            if ((this.batch.frameNo / n) % 1 == 0) { return true; }
+            return false;
+        }
+		
+		var game = new Game1();
+		
+		game.Init();
+		
+		setInterval(function(){ game.RunOneFrame()}, 17);
+		
+        function IsReqSuccess(req) 
+		{ return req.readyState == 4 && req.status == 200; }
+	}
+		
+    </script>
+</head>
+<body> <!--onload="Init()"-->
+    <div style="margin:auto; display:block; width:100px" id="in">
+        <input style="margin:auto; display:block;" placeholder="Name" id="inp"/>
+        <button style="margin:auto; display:block;" id="etr" onclick="Init()">Enter</button>
+    </div>
+    <div style="margin:auto; display:block; width:100px" id="tab"></div>
+</body>
+</html>
